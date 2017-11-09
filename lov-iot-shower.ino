@@ -93,6 +93,7 @@ void setup(void){
   readWifiFromEeprom();
   //connectToWifi();
 
+  if (MDNS.begin("esp8266", WiFi.localIP())) {
     Serial.println("MDNS responder started");
   }
   
