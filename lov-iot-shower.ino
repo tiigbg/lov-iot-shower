@@ -1,9 +1,11 @@
+#include <EEPROM.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
+
 
 #include "passwords.h"
 
@@ -56,6 +58,10 @@ const char webpage[] =
 "</body>"
 "</html>";
 
+struct WifiLogin {
+  char ssid[101];
+  char password[101];
+};
 
 
 
@@ -63,6 +69,7 @@ const char webpage[] =
 
 void setup(void){
   Serial.begin(115200);
+  EEPROM.begin(512);
   
   pinMode(led, OUTPUT);
   digitalWrite(led, LOW);
@@ -83,9 +90,9 @@ void setup(void){
   sensors.begin();
 
   startHostingWifi();
+  readWifiFromEeprom();
   //connectToWifi();
 
-  if (MDNS.begin("esp8266")) {
     Serial.println("MDNS responder started");
   }
   
@@ -218,10 +225,34 @@ void handleWifiUpdate() {
   char newPassword[101];
   server.arg(0).toCharArray(newSsid, 101);
   server.arg(1).toCharArray(newPassword, 101);
+
+  // store the new wifi in EEPROM
+  int eeAddress = 0;   //Location we want the data to be put.
+  WifiLogin newWifiLogin;
+  memcpy(newWifiLogin.ssid, newSsid, 101);
+  memcpy(newWifiLogin.password, newPassword, 101);
+
+  Serial.println("newWifiLogin");
+  Serial.println(newWifiLogin.ssid);
+  Serial.println(newWifiLogin.password);
+  EEPROM.put(eeAddress, newWifiLogin);
+  EEPROM.commit();
+  
   
   WiFi.disconnect();
   delay(200);
   connectToWifi(newSsid, newPassword);
+}
+
+void readWifiFromEeprom() {
+  int eeAddress = 0;
+  WifiLogin storedWifiLogin; //Variable to store custom object read from EEPROM.
+  EEPROM.get(eeAddress, storedWifiLogin);
+  Serial.println("Tried to read from eeeprom.");
+  Serial.print("ssid:");
+  Serial.println(storedWifiLogin.ssid);
+  Serial.print("password:");
+  Serial.println(storedWifiLogin.password);
 }
 
 void handleStatusPage() {
