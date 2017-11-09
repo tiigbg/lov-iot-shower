@@ -9,13 +9,15 @@
 
 #include "passwords.h"
 
+ADC_MODE(ADC_VCC); // to be able to use getVcc()
 
 
-ESP8266WebServer server(80);
+
 
 
 
 const int led = BUILTIN_LED; // low will turn it on
+float vcc;
 
 // == vars for waterflow sensor ==
 
@@ -41,6 +43,7 @@ DallasTemperature sensors(&ds); // will handle the temperature monitoring device
 
 // == vars for webb stuff ==
 
+ESP8266WebServer server(80);
 const char webpage[] = 
 "<!DOCTYPE html>"
 "<html>"
@@ -71,12 +74,14 @@ void setup(void){
   Serial.begin(115200);
   EEPROM.begin(512);
   
+  
   pinMode(led, OUTPUT);
   digitalWrite(led, LOW);
 
   pinMode(sensorPin, INPUT);
   digitalWrite(sensorPin, HIGH);
 
+  vcc = 0;
   pulseCount        = 0;
   flowRate          = 0.0;
   flowMilliLitres   = 0;
@@ -119,7 +124,10 @@ void loop(void){
     // the host
     detachInterrupt(sensorInterrupt);
 
-
+    vcc = ESP.getVcc()/1024.0f;
+    Serial.print("VCC: ");
+    Serial.print(vcc);
+    
     sensors.requestTemperatures();
     temp = sensors.getTempCByIndex(0);
     Serial.print("Temp: ");
