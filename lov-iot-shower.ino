@@ -24,12 +24,14 @@ byte sensorPin       = D2;
 float calibrationFactor = 11;
 volatile byte pulseCount;  
 float flowRate;
+unsigned int frac;
 unsigned int flowMilliLitres;
 unsigned long totalMilliLitres;
 unsigned long oldTime;
 
 // == vars for temperature sensor ==
 
+float temp;
 #define ONE_WIRE_BUS D3
 OneWire ds(ONE_WIRE_BUS); //  will handle the onewire protocol
 DallasTemperature sensors(&ds); // will handle the temperature monitoring devices
@@ -73,6 +75,7 @@ void setup(void){
   flowMilliLitres   = 0;
   totalMilliLitres  = 0;
   oldTime           = 0;
+  temp              = 0;
 
   // catch an interrupt when we get a puls from the water flow sensor
   attachInterrupt(sensorInterrupt, pulseCounter, RISING);
@@ -88,21 +91,8 @@ void setup(void){
   
   server.on("/", handleRoot);
 
-  server.on("/update_wifi.php", [](){
-    
-    // server.arg(0); // wifi
-    // server.arg(1); // password
-    server.send(200, "text/plain", "Connecting to wifi..");
-    
-    char newSsid[101];
-    char newPassword[101];
-    server.arg(0).toCharArray(newSsid, 101);
-    server.arg(1).toCharArray(newPassword, 101);
-    
-    WiFi.disconnect();
-    delay(200);
-    connectToWifi(newSsid, newPassword);
-  });
+  server.on("/update_wifi.php", handleWifiUpdate);
+  server.on("/status", handleStatusPage);
 
   server.onNotFound(handleNotFound);
 
@@ -123,7 +113,7 @@ void loop(void){
 
 
     sensors.requestTemperatures();
-    float temp = sensors.getTempCByIndex(0);
+    temp = sensors.getTempCByIndex(0);
     Serial.print("Temp: ");
     Serial.print(temp);
 
@@ -148,8 +138,6 @@ void loop(void){
     
     // Add the millilitres passed in this second to the cumulative total
     totalMilliLitres += flowMilliLitres;
-      
-    unsigned int frac;
     
     // Print the flow rate for this second in litres / minute
     Serial.print(" Flow rate: ");
@@ -173,7 +161,7 @@ void loop(void){
     pulseCount = 0;
     
     // Enable the interrupt again now that we've finished sending output
-    attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
+    attachInterrupt(sensorInterrupt, pulseCounter, RISING);
   }
 }
 
@@ -219,6 +207,48 @@ void handleRoot() {
   digitalWrite(led, 1);
   server.send(200, "text/html", webpage);
   digitalWrite(led, 0);
+}
+
+void handleWifiUpdate() {
+  // server.arg(0); // wifi
+  // server.arg(1); // password
+  server.send(200, "text/plain", "Connecting to wifi..");
+  
+  char newSsid[101];
+  char newPassword[101];
+  server.arg(0).toCharArray(newSsid, 101);
+  server.arg(1).toCharArray(newPassword, 101);
+  
+  WiFi.disconnect();
+  delay(200);
+  connectToWifi(newSsid, newPassword);
+}
+
+void handleStatusPage() {
+  String statusPage = "<html><head><meta http-equiv=\"refresh\" content=\"1\"></head><body>";
+
+  statusPage += "Temp: ";
+  statusPage += temp;
+  statusPage += " Flow rate: ";
+  statusPage += int(flowRate);  // Print the integer part of the variable
+  statusPage += ".";             // Print the decimal point
+  // Determine the fractional part. The 10 multiplier gives us 1 decimal place.
+  frac = (flowRate - int(flowRate)) * 10;
+  statusPage += frac;      // Print the fractional part of the variable
+  statusPage += "L/min";
+  // Print the number of litres flowed in this second
+  statusPage += "  Current Liquid Flowing: ";             // Output separator
+  statusPage += flowMilliLitres;
+  statusPage += "mL/Sec";
+
+  // Print the cumulative total of litres flowed since starting
+  statusPage += "  Output Liquid Quantity: ";             // Output separator
+  statusPage += totalMilliLitres;
+  statusPage += "mL"; 
+  
+  statusPage += "</body></html>";
+  
+  server.send(200, "text/html", statusPage);
 }
 
 void handleNotFound(){
