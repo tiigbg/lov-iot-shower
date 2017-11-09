@@ -8,11 +8,32 @@
 
 ESP8266WebServer server(80);
 
-const int led = 13;
+
+
+const int led = BUILTIN_LED;
+
+const char webpage[] = 
+"<!DOCTYPE html>"
+"<html>"
+"<body>"
+"<form action=\"/update_wifi.php\">"
+"   <p>Fyll i vilket nätverk din sensor ska koppla sig till.</p>"
+"  wifi:<br>"
+"  <input type=\"text\" name=\"wifi\" >"
+"  <br/>"
+"  Lösenord:<br/>"
+"  <input type=\"text\" name=\"password\">"
+"  <br/><br/>"
+"  <input type=\"submit\" value=\"Connect\">"
+"</form>"
+"</body>"
+"</html>";
+
+
 
 void handleRoot() {
   digitalWrite(led, 1);
-  server.send(200, "text/plain", "hello from esp8266!");
+  server.send(200, "text/html", webpage);
   digitalWrite(led, 0);
 }
 
@@ -37,7 +58,51 @@ void setup(void){
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
   Serial.begin(115200);
-  WiFi.begin(ssid, password);
+
+
+  startHostingWifi();
+  //connectToWifi();
+
+  if (MDNS.begin("esp8266")) {
+    Serial.println("MDNS responder started");
+  }
+  
+  server.on("/", handleRoot);
+
+  server.on("/update_wifi.php", [](){
+    
+    // server.arg(0); // wifi
+    // server.arg(1); // password
+    server.send(200, "text/plain", "Connecting to wifi..");
+    
+    char newSsid[101];
+    char newPassword[101];
+    server.arg(0).toCharArray(newSsid, 101);
+    server.arg(1).toCharArray(newPassword, 101);
+    Serial.println(server.arg(0));
+    Serial.print("Received this as new ssid:");
+    Serial.println(newSsid);
+
+    WiFi.disconnect();
+    delay(200);
+    connectToWifi(newSsid, newPassword);
+  });
+
+  server.onNotFound(handleNotFound);
+
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void connectToMainWifi() {
+  //connectToWifi(ssid, password);
+}
+
+void connectToWifi(char* newSsid, char* newPassword) {
+  WiFi.begin(newSsid, newPassword);
+  Serial.print("Going to connect to ");
+  Serial.println(newSsid);
+  
   Serial.println("");
 
   // Wait for connection
@@ -47,24 +112,23 @@ void setup(void){
   }
   Serial.println("");
   Serial.print("Connected to ");
-  Serial.println(ssid);
+  Serial.println(newSsid);
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  if (MDNS.begin("esp8266")) {
-    Serial.println("MDNS responder started");
-  }
+  
+}
 
-  server.on("/", handleRoot);
+void startHostingWifi() {
+  /*IPAddress ip(192, 168, 4, 1);
+  IPAddress gateway(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  IPAddress dns(192, 168, 1, 1);
 
-  server.on("/inline", [](){
-    server.send(200, "text/plain", "this works as well");
-  });
-
-  server.onNotFound(handleNotFound);
-
-  server.begin();
-  Serial.println("HTTP server started");
+  WiFi.config(ip, gateway, subnet, dns);*/
+  
+  WiFi.softAP("shower-sensor");
+    
 }
 
 void loop(void){
