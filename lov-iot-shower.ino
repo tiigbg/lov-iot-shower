@@ -18,8 +18,10 @@ ADC_MODE(ADC_VCC); // to be able to use getVcc()
 
 const int led = BUILTIN_LED; // low will turn it on
 float vcc;
+// #define SECONDS_DS(seconds) ((seconds)*1000000UL)
 
 // == vars for waterflow sensor ==
+// use 10k ohm pull-up resistor between measure pin and 5v.
 
 byte sensorInterrupt = D2;  // 1 = digital pin 2 on leonardo
 byte sensorPin       = D2;
@@ -34,7 +36,8 @@ unsigned long totalMilliLitres;
 unsigned long oldTime;
 
 // == vars for temperature sensor ==
-
+// use 4.7k ohm resistor between sensor pin (= middle leg) and 5v.
+// connect left and right leg to ground. Can connect right leg to 5v instead if you want.
 float temp;
 #define ONE_WIRE_BUS D3
 OneWire ds(ONE_WIRE_BUS); //  will handle the onewire protocol
@@ -42,6 +45,8 @@ DallasTemperature sensors(&ds); // will handle the temperature monitoring device
 
 
 // == vars for webb stuff ==
+
+String current_ssid = "";
 
 ESP8266WebServer server(80);
 const char webpage[] = 
@@ -58,6 +63,7 @@ const char webpage[] =
 "  <br/><br/>"
 "  <input type=\"submit\" value=\"Connect\">"
 "</form>"
+"<a href=\"status\">Status</a>"
 "</body>"
 "</html>";
 
@@ -106,6 +112,7 @@ void setup(void){
 
   server.on("/update_wifi.php", handleWifiUpdate);
   server.on("/status", handleStatusPage);
+  //server.on("/sleep", [](){ ESP.deepSleep(SECONDS_DS(5), WAKE_RF_DISABLED);});
 
   server.onNotFound(handleNotFound);
 
@@ -124,10 +131,13 @@ void loop(void){
     // the host
     detachInterrupt(sensorInterrupt);
 
+    
+    
+
     vcc = ESP.getVcc()/1024.0f;
     Serial.print("VCC: ");
     Serial.print(vcc);
-    
+
     sensors.requestTemperatures();
     temp = sensors.getTempCByIndex(0);
     Serial.print("Temp: ");
@@ -171,7 +181,13 @@ void loop(void){
     // Print the cumulative total of litres flowed since starting
     Serial.print("  Output Liquid Quantity: ");             // Output separator
     Serial.print(totalMilliLitres);
-    Serial.println("mL"); 
+    Serial.print("mL"); 
+
+    Serial.print("   Wifi ");
+    if(WiFi.status() != WL_CONNECTED)
+      Serial.print("not "); 
+    Serial.print("connected to ");
+    Serial.println(current_ssid);
 
     // Reset the pulse counter so we can start incrementing again
     pulseCount = 0;
@@ -183,7 +199,7 @@ void loop(void){
 
 // == wifi functions == 
 void connectToMainWifi() {
-  //connectToWifi(ssid, password);
+  //connectToWifi(ssid_default, password_default);
 }
 
 void connectToWifi(char* newSsid, char* newPassword) {
@@ -203,6 +219,8 @@ void connectToWifi(char* newSsid, char* newPassword) {
   Serial.println(newSsid);
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  current_ssid = newSsid;
 
   
 }
@@ -257,17 +275,21 @@ void readWifiFromEeprom() {
   int eeAddress = 0;
   WifiLogin storedWifiLogin; //Variable to store custom object read from EEPROM.
   EEPROM.get(eeAddress, storedWifiLogin);
+  Serial.println("");
   Serial.println("Tried to read from eeeprom.");
   Serial.print("ssid:");
   Serial.println(storedWifiLogin.ssid);
   Serial.print("password:");
   Serial.println(storedWifiLogin.password);
+  connectToWifi(storedWifiLogin.ssid, storedWifiLogin.password);
 }
 
 void handleStatusPage() {
   String statusPage = "<html><head><meta http-equiv=\"refresh\" content=\"1\"></head><body>";
 
-  statusPage += "Temp: ";
+  statusPage += "VCC: ";
+  statusPage += vcc;
+  statusPage += " Temp: ";
   statusPage += temp;
   statusPage += " Flow rate: ";
   statusPage += int(flowRate);  // Print the integer part of the variable
@@ -285,7 +307,13 @@ void handleStatusPage() {
   statusPage += "  Output Liquid Quantity: ";             // Output separator
   statusPage += totalMilliLitres;
   statusPage += "mL"; 
-  
+
+  statusPage += "   Wifi "; 
+  if(WiFi.status() != WL_CONNECTED)
+    statusPage += "not "; 
+  statusPage += "connected to ";
+  statusPage += current_ssid;
+    
   statusPage += "</body></html>";
   
   server.send(200, "text/html", statusPage);
